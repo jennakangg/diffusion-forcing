@@ -64,6 +64,7 @@ class BaseExperiment(ABC):
         :return:  a pytorch-lightning module to be launched
         """
         algo_name = self.root_cfg.algorithm._name
+        print(self.compatible_algorithms)
         if algo_name not in self.compatible_algorithms:
             raise ValueError(
                 f"Algorithm {algo_name} not found in compatible_algorithms for this Experiment class. "

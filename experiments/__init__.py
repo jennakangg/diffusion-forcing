@@ -5,11 +5,15 @@ from lightning.pytorch.loggers.wandb import WandbLogger
 
 from .exp_base import BaseExperiment
 from .exp_video import VideoPredictionExperiment
+from .exp_gaze import GazePredictionExperiment
+
 from .exp_planning import PlanningExperiment
 
 # each key has to be a yaml file under '[project_root]/configurations/experiment' without .yaml suffix
 exp_registry = dict(
     exp_video=VideoPredictionExperiment,
+    exp_gaze=GazePredictionExperiment,
+
     exp_planning=PlanningExperiment,
 )
 
@@ -31,5 +35,7 @@ def build_experiment(
             f"Experiment {cfg.experiment._name} not found in registry {list(exp_registry.keys())}. "
             "Make sure you register it correctly in 'experiments/__init__.py' under the same name as yaml file."
         )
+
+    print(cfg)
 
     return exp_registry[cfg.experiment._name](cfg, logger, ckpt_path)

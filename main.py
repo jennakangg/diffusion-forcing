@@ -22,7 +22,6 @@ from utils.ckpt_utils import download_latest_checkpoint, is_run_id
 from utils.cluster_utils import submit_slurm_job
 from utils.distributed_utils import is_rank_zero
 
-
 def run_local(cfg: DictConfig):
     # delay some imports in case they are not needed in non-local envs for submission
     from experiments import build_experiment
@@ -31,7 +30,7 @@ def run_local(cfg: DictConfig):
     # Get yaml names
     hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
     cfg_choice = OmegaConf.to_container(hydra_cfg.runtime.choices)
-
+    print(cfg_choice)
     with open_dict(cfg):
         if cfg_choice["experiment"] is not None:
             cfg.experiment._name = cfg_choice["experiment"]
