@@ -100,30 +100,41 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
 
     def __getitem__(self, idx):
         idx = self.idx_remap[idx]
-        video_idx, frame_idx = self.split_idx(idx)
-        gaze_path = self.data_paths[video_idx]
-        gaze_points = self.load_gaze_points(gaze_path)
+        file_idx, frame_idx = self.split_idx(idx)
+        gaze_path = self.data_paths[file_idx]
+        gaze_points = self.load_gaze_points(gaze_path)  # (T, 2)
 
-        # (num_frames, 2)
+        # slice
         clip = gaze_points[frame_idx : frame_idx + self.n_frames]
-
         pad_len = self.n_frames - len(clip)
+
         nonterminal = np.ones(self.n_frames)
         if len(clip) < self.n_frames:
             clip = np.pad(clip, ((0, pad_len), (0, 0)))
             nonterminal[-pad_len:] = 0
 
+        # normalize if needed
+        # if np.max(clip) > 1.0:
+        #     clip = clip / np.array([[self.cfg.screen_width, self.cfg.screen_height]])
+
+        # convert to tensor
         clip = torch.from_numpy(clip).float()  # (T, 2)
 
-        # --- pad channel dimension from 2 → 3 ---
-        # add dummy third channel (zeros or duplicates)
+        # pad to 3 channels (x, y, dummy)
         clip = F.pad(clip, (0, 1), mode="constant", value=0.0)  # (T, 3)
 
-        # make it look like video
+        # add spatial dims
         clip = clip.unsqueeze(-1).unsqueeze(-1)  # (T, 3, 1, 1)
+        clip = clip.repeat(1, 1, 8, 8)  # (T, 3, 8, 8)
 
-        # model expects (B, C, T, H, W) after batching
-        clip = clip.permute(1, 0, 2, 3)  # (3, T, 1, 1)
+        # === critical part ===
+        # keep (T, C, H, W) to match video version
+        clip = clip.contiguous()
 
-        return clip, torch.from_numpy(nonterminal[:: self.frame_skip]).float()
+        return (
+            clip[:: self.frame_skip],                         # (T', 3, 1, 1)
+            torch.zeros((clip[:: self.frame_skip].shape[0],)), # dummy actions if needed
+            torch.from_numpy(nonterminal[:: self.frame_skip]).float(),
+        )
+
 
