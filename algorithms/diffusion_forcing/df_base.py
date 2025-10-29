@@ -24,6 +24,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
         self.x_shape = cfg.x_shape
+        print(f"XSHAPE: {self.x_shape}")
         self.frame_stack = cfg.frame_stack
         self.x_stacked_shape = list(self.x_shape)
         self.x_stacked_shape[0] *= cfg.frame_stack

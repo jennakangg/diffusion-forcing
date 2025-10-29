@@ -107,7 +107,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         # slice
         clip = gaze_points[frame_idx : frame_idx + self.n_frames]
         pad_len = self.n_frames - len(clip)
-
+        
         nonterminal = np.ones(self.n_frames)
         if len(clip) < self.n_frames:
             clip = np.pad(clip, ((0, pad_len), (0, 0)))
@@ -124,9 +124,8 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         clip = F.pad(clip, (0, 1), mode="constant", value=0.0)  # (T, 3)
 
         # add spatial dims
-        clip = clip.unsqueeze(-1).unsqueeze(-1)  # (T, 3, 1, 1)
-        clip = clip.repeat(1, 1, 8, 8)  # (T, 3, 8, 8)
-
+        clip = clip.unsqueeze(-1).unsqueeze(-1)      # (T, 3, 1, 1)
+        clip = clip.repeat(1, 1, self.cfg.resolution, self.cfg.resolution)             # (T, 3, 32, 32)
         # === critical part ===
         # keep (T, C, H, W) to match video version
         clip = clip.contiguous()
