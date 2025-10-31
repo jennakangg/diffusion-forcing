@@ -27,6 +27,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         self.cfg = cfg
         self.split = split
         self.save_dir = Path(cfg.save_dir)
+        self.frame_stride = cfg.frame_stride
         self.split_dir = self.save_dir / split
         self.save_dir.mkdir(exist_ok=True, parents=True)
 
@@ -88,10 +89,14 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         Expected columns: ['frame_idx', 'x', 'y'] or ['x', 'y'].
         """
         df = pd.read_csv(csv_path)
+
+        df = df.dropna(subset=['x', 'y'])
+
         # auto-detect columns
         if 'x' in df.columns and 'y' in df.columns:
-            coords = df[['x', 'y']].to_numpy(dtype=np.float32)
+            coords = df[['x', 'y']].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float32)
         else:
+            print(f"NO XY COL: {csv_path}")
             coords = df.iloc[:, -2:].to_numpy(dtype=np.float32)
         return coords  # shape: (T, 2)
 
@@ -104,8 +109,21 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         gaze_path = self.data_paths[file_idx]
         gaze_points = self.load_gaze_points(gaze_path)  # (T, 2)
 
+        n_nans = np.isnan(gaze_points).sum()
+        n_infs = np.isinf(gaze_points).sum()
+        if n_nans > 0 or n_infs > 0:
+            print(f"[WARN] {gaze_path}: NaNs={n_nans}, Infs={n_infs}")
+            # Clean values
+            valid_mask = ~np.isnan(gaze_points).any(axis=1) & ~np.isinf(gaze_points).any(axis=1)
+            n_removed = len(gaze_points) - valid_mask.sum()
+            print(f"   → Removed {n_removed} invalid rows")
+            gaze_points = gaze_points[valid_mask]
+
         # slice
-        clip = gaze_points[frame_idx : frame_idx + self.n_frames]
+        # clip = gaze_points[frame_idx : frame_idx + self.n_frames]
+
+        end_idx = min(frame_idx + self.frame_stride * self.n_frames, len(gaze_points))
+        clip = gaze_points[frame_idx:end_idx:self.frame_stride]
         pad_len = self.n_frames - len(clip)
         
         nonterminal = np.ones(self.n_frames)
@@ -114,8 +132,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
             nonterminal[-pad_len:] = 0
 
         # normalize if needed
-        # if np.max(clip) > 1.0:
-        #     clip = clip / np.array([[self.cfg.screen_width, self.cfg.screen_height]])
+        clip = clip / np.array([[1408.0, 1408.0]])
 
         # convert to tensor
         clip = torch.from_numpy(clip).float()  # (T, 2)
@@ -125,7 +142,18 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
 
         # add spatial dims
         clip = clip.unsqueeze(-1).unsqueeze(-1)      # (T, 3, 1, 1)
-        clip = clip.repeat(1, 1, self.cfg.resolution, self.cfg.resolution)             # (T, 3, 32, 32)
+        clip = clip.repeat(1, 1, self.cfg.resolution, self.cfg.resolution)
+
+
+        # # Compute how much to pad to reach target resolution
+        # target_h = self.cfg.resolution
+        # target_w = self.cfg.resolution
+
+        # # Create zero tensor and copy into top-left corner (or center if you prefer)
+        # padded = torch.zeros(clip.size(0), clip.size(1), target_h, target_w, device=clip.device, dtype=clip.dtype)
+        # padded[:, :, :1, :1] = clip  # puts the (1x1) values at top-left
+
+        # clip = padded
         # === critical part ===
         # keep (T, C, H, W) to match video version
         clip = clip.contiguous()

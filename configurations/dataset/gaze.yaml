@@ -1,8 +1,8 @@
 defaults:
   - base_video
 
-save_dir: C:\Users\jk8659\NYU\research\Scanpath\diffusion-forcing\data\ego4d_small
-n_frames: 50 # TODO: increase later
+save_dir: C:\Users\jk8659\NYU\research\Scanpath\diffusion-forcing\data\ego4d_medium_smoothed
+n_frames: 100 # TODO: increase to 100
 resolution: 8
 data_mean: 0.5
 data_std: 0.5
@@ -10,3 +10,4 @@ external_cond_dim: 0
 context_length: 2
 frame_skip: 2
 validation_multiplier: 1
+frame_stride: 10

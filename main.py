@@ -30,7 +30,6 @@ def run_local(cfg: DictConfig):
     # Get yaml names
     hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
     cfg_choice = OmegaConf.to_container(hydra_cfg.runtime.choices)
-    print(cfg_choice)
     with open_dict(cfg):
         if cfg_choice["experiment"] is not None:
             cfg.experiment._name = cfg_choice["experiment"]
