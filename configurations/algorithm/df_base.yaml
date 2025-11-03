@@ -39,4 +39,4 @@ diffusion:
   stabilization_level: 10
   # architecture
   architecture:
-    network_size: 32
+    network_size: 16

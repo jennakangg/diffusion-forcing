@@ -8,6 +8,7 @@ from pathlib import Path
 from abc import abstractmethod, ABC
 import json
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 
 class BaseGazeDataset(torch.utils.data.Dataset, ABC):
@@ -30,6 +31,8 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         self.frame_stride = cfg.frame_stride
         self.split_dir = self.save_dir / split
         self.save_dir.mkdir(exist_ok=True, parents=True)
+        self.plot_counter = 0 
+        self.debug_dir = "debug/ego4d"
 
         self.n_frames = (
             cfg.n_frames * cfg.frame_skip
@@ -122,14 +125,19 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         # slice
         # clip = gaze_points[frame_idx : frame_idx + self.n_frames]
 
-        end_idx = min(frame_idx + self.frame_stride * self.n_frames, len(gaze_points))
-        clip = gaze_points[frame_idx:end_idx:self.frame_stride]
-        pad_len = self.n_frames - len(clip)
+        end_idx = frame_idx + self.frame_stride * self.n_frames
+
+        end_idx = frame_idx + self.frame_stride * self.n_frames
+        if end_idx > len(gaze_points):
+            # not enough data left for a full clip → skip
+            new_idx = (idx + 1) % len(self.idx_remap)
+            return self.__getitem__(new_idx)
         
+        
+        # normal slicing (only valid length clips)
+        clip = gaze_points[frame_idx:end_idx:self.frame_stride]
+
         nonterminal = np.ones(self.n_frames)
-        if len(clip) < self.n_frames:
-            clip = np.pad(clip, ((0, pad_len), (0, 0)))
-            nonterminal[-pad_len:] = 0
 
         # normalize if needed
         clip = clip / np.array([[1408.0, 1408.0]])
@@ -144,19 +152,51 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         clip = clip.unsqueeze(-1).unsqueeze(-1)      # (T, 3, 1, 1)
         clip = clip.repeat(1, 1, self.cfg.resolution, self.cfg.resolution)
 
-
-        # # Compute how much to pad to reach target resolution
-        # target_h = self.cfg.resolution
-        # target_w = self.cfg.resolution
-
-        # # Create zero tensor and copy into top-left corner (or center if you prefer)
-        # padded = torch.zeros(clip.size(0), clip.size(1), target_h, target_w, device=clip.device, dtype=clip.dtype)
-        # padded[:, :, :1, :1] = clip  # puts the (1x1) values at top-left
-
-        # clip = padded
-        # === critical part ===
-        # keep (T, C, H, W) to match video version
         clip = clip.contiguous()
+
+        # === Debug Visualization ===
+        # if self.plot_counter < 5:
+        #     base_name = os.path.splitext(os.path.basename(gaze_path))[0]
+
+        #     # --- Save gaze points to CSV ---
+        #     csv_path = os.path.join(self.debug_dir, f"{base_name}_gaze_points.csv")
+        #     df = pd.DataFrame(gaze_points, columns=["x", "y"])
+        #     df.to_csv(csv_path, index_label="frame")
+        #     print(f"[INFO] Saved gaze CSV → {csv_path}")
+
+        #     # --- Plot 1: Time vs X/Y ---
+        #     time_axis = np.arange(len(gaze_points))
+        #     plt.figure(figsize=(8, 4))
+        #     plt.plot(time_axis, gaze_points[:, 0], label="x-coordinate", color="r", alpha=0.7)
+        #     plt.plot(time_axis, gaze_points[:, 1], label="y-coordinate", color="b", alpha=0.7)
+        #     plt.xlabel("Frame index (time)")
+        #     plt.ylabel("Gaze position (pixels)")
+        #     plt.title(f"Gaze trajectory over time: {base_name}")
+        #     plt.legend()
+        #     plt.tight_layout()
+        #     time_plot_path = os.path.join(self.debug_dir, f"{base_name}_time_plot.png")
+        #     plt.savefig(time_plot_path)
+        #     plt.close()
+        #     print(f"[INFO] Saved time plot → {time_plot_path}")
+
+        #     # --- Plot 2: 2D XY Path ---
+        #     plt.figure(figsize=(5, 5))
+        #     plt.plot(gaze_points[:, 0], gaze_points[:, 1], '-', color='k', alpha=0.8, lw=1)
+        #     plt.scatter(gaze_points[0, 0], gaze_points[0, 1], color='green', s=40, label='start')
+        #     plt.scatter(gaze_points[-1, 0], gaze_points[-1, 1], color='red', s=40, label='end')
+        #     plt.xlabel("x position (pixels)")
+        #     plt.ylabel("y position (pixels)")
+        #     plt.title(f"Gaze 2D path: {base_name}")
+        #     plt.legend()
+        #     plt.gca().invert_yaxis()
+        #     plt.axis("equal")
+        #     plt.tight_layout()
+        #     path_plot_path = os.path.join(self.debug_dir, f"{base_name}_xy_path.png")
+        #     plt.savefig(path_plot_path)
+        #     plt.close()
+        #     print(f"[INFO] Saved XY path plot → {path_plot_path}")
+
+        #     self.plot_counter += 1
 
         return (
             clip[:: self.frame_skip],                         # (T', 3, 1, 1)
