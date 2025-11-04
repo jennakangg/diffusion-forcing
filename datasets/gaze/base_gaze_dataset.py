@@ -140,7 +140,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         nonterminal = np.ones(self.n_frames)
 
         # normalize if needed
-        clip = clip / np.array([[1408.0, 1408.0]])
+        clip = clip / np.array([[self.cfg.dataset_video_resolution, self.cfg.dataset_video_resolution]])
 
         # convert to tensor
         clip = torch.from_numpy(clip).float()  # (T, 2)

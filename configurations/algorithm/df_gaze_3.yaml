@@ -10,6 +10,7 @@ dataset_video_resolution: ${dataset.dataset_video_resolution}
 weight_decay: 2e-3
 warmup_steps: 10000
 optimizer_beta: [0.9, 0.99]
+
 diffusion:
   # training
   beta_schedule: sigmoid
@@ -23,7 +24,7 @@ diffusion:
   stabilization_level: 15
   # architecture
   architecture:
-    network_size: 32
+    network_size: 8
     attn_heads: 4
     attn_dim_head: 64
     dim_mults: [1, 2, 4, 8]

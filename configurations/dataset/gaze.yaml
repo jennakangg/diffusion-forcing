@@ -11,3 +11,4 @@ context_length: 20
 frame_skip: 2
 validation_multiplier: 1
 frame_stride: 10
+dataset_video_resolution: 1408

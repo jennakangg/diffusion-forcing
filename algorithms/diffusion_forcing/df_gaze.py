@@ -7,7 +7,7 @@ from algorithms.common.metrics import (
     FrechetVideoDistance,
 )
 from .df_base import DiffusionForcingBase
-from utils.logging_utils import log_video, get_validation_metrics_for_videos
+from utils.logging_utils import log_video, get_validation_metrics_for_simple, log_gaze_video_2d
 
 
 class DiffusionForcingScanpath(DiffusionForcingBase):
@@ -37,36 +37,52 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 namespace="training_vis",
                 logger=self.logger.experiment,
             )
+            log_gaze_video_2d(
+                output_dict["xs_pred"],
+                output_dict["xs"],
+                step=self.global_step,
+                namespace="training_vis_2d",
+                resolution=self.cfg.dataset_video_resolution,
+                logger=self.logger.experiment,
+            )
         return output_dict
 
     def on_validation_epoch_end(self, namespace="validation") -> None:
         if not self.validation_step_outputs:
             return
-        xs_pred = []
-        xs = []
-        for pred, gt in self.validation_step_outputs:
-            xs_pred.append(pred)
-            xs.append(gt)
-        xs_pred = torch.cat(xs_pred, 1)
-        xs = torch.cat(xs, 1)
 
+        # === collect predictions and ground truth ===
+        xs_pred, xs = zip(*self.validation_step_outputs)
+        xs_pred = torch.cat(xs_pred, dim=1)
+        xs = torch.cat(xs, dim=1)
+
+        # === optional visualization logging ===
         if self.logger:
             log_video(
                 xs_pred,
                 xs,
                 step=None if namespace == "test" else self.global_step,
-                namespace=namespace + "_vis",
+                namespace=f"{namespace}_vis",
                 context_frames=self.context_frames,
                 logger=self.logger.experiment,
             )
 
-        metric_dict = get_validation_metrics_for_videos(
+            log_gaze_video_2d(
+                pred=xs_pred,
+                gt=xs,
+                step=None if namespace == "test" else self.global_step,
+                namespace=f"{namespace}_vis_2d",
+                resolution=self.cfg.dataset_video_resolution,
+                logger=self.logger.experiment,
+            )
+
+        # === compute simple metrics: MSE, PSNR, SSIM ===
+        metric_dict = get_validation_metrics_for_simple(
             xs_pred[self.context_frames :],
             xs[self.context_frames :],
-            lpips_model=self.validation_lpips_model,
-            fid_model=self.validation_fid_model,
-            fvd_model=(self.validation_fvd_model[0] if self.validation_fvd_model else None),
         )
+
+        # === log results ===
         self.log_dict(
             {f"{namespace}/{k}": v for k, v in metric_dict.items()},
             on_step=False,
@@ -74,4 +90,5 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
             prog_bar=True,
         )
 
+        # === clear outputs for next epoch ===
         self.validation_step_outputs.clear()
