@@ -24,7 +24,6 @@ class DiffusionForcingBase(BasePytorchAlgo):
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
         self.x_shape = cfg.x_shape
-        print(f"XSHAPE: {self.x_shape}")
         self.frame_stack = cfg.frame_stack
         self.x_stacked_shape = list(self.x_shape)
         self.x_stacked_shape[0] *= cfg.frame_stack
@@ -32,6 +31,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         self.context_frames = cfg.context_frames
         self.chunk_size = cfg.chunk_size
         self.external_cond_dim = cfg.external_cond_dim
+        print(f"self.external_cond_dim: {self.external_cond_dim}")
         self.causal = cfg.causal
 
         self.uncertainty_scale = cfg.uncertainty_scale
@@ -246,6 +246,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
             conditions = batch[1]
             conditions = torch.cat([torch.zeros_like(conditions[:, :1]), conditions[:, 1:]], 1)
             conditions = rearrange(conditions, "b (t fs) d -> t b (fs d)", fs=self.frame_stack).contiguous()
+            print("USING EXTERNAL CONDITION WOO")
         else:
             conditions = [None for _ in range(n_frames)]
 

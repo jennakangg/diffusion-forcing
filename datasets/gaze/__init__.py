@@ -1,1 +1,2 @@
 from .ego4d_gaze_dataset import Ego4DGazeDataset
+from .ego4d_gaze_video_dataset import Ego4DGazeVideoDataset

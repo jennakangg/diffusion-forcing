@@ -31,6 +31,4 @@ def build_experiment(
             "Make sure you register it correctly in 'experiments/__init__.py' under the same name as yaml file."
         )
 
-    print(cfg)
-
     return exp_registry[cfg.experiment._name](cfg, logger, ckpt_path)
