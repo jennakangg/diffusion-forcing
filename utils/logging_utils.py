@@ -74,7 +74,27 @@ def log_video(
             }
         )
 
+def get_validation_metrics_for_states(observation_hat, observation_gt):
+    """
+    :param observation_hat: predicted observation tensor of shape (frame, batch, channel)
+    :param observation_gt: ground-truth observation tensor of shape (frame, batch, channel)
+    :return: a tuple of metrics
+    """
+    frame, batch, channel = observation_hat.shape
 
+    # reshape to (frame * batch, channel)
+    observation_hat = observation_hat.reshape(-1, channel)
+    observation_gt = observation_gt.reshape(-1, channel)
+
+    mse = mean_squared_error(observation_hat, observation_gt)
+    psnr = peak_signal_noise_ratio(observation_hat, observation_gt)
+
+    output_dict = {
+        "mse": mse,
+        "psnr": psnr,
+    }
+
+    return output_dict
 
 def log_gaze_video_2d(
     pred,

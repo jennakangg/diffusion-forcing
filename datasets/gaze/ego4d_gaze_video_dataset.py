@@ -27,6 +27,28 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
 
     def __init__(self, cfg, split="training"):
         super().__init__(cfg, split)
+        # === Initialize and cache ResNet backbone once ===
+        model_name = getattr(cfg, "resnet_model", "resnet18")
+
+        try:
+            weights = getattr(models, model_name).weights.DEFAULT
+        except AttributeError:
+            # For backward compatibility if DEFAULT not defined
+            weights = "IMAGENET1K_V1"
+
+        backbone = getattr(models, model_name)(weights=weights)
+        self.resnet = torch.nn.Sequential(*list(backbone.children())[:-2]).eval()
+
+        if torch.cuda.is_available():
+            self.resnet = self.resnet.cuda()
+
+        self.resnet_transform = T.Compose([
+            T.ToPILImage(),
+            T.Resize((224, 224)),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225])
+        ])
 
     def download_dataset(self) -> Sequence[int]:
         """
@@ -90,8 +112,10 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
         # === Find matching video ===
         video_prefix = os.path.basename(gaze_path).replace("_general_eye_gaze_2d.csv", "")
         take_dir = Path(self.cfg.takes_root) / video_prefix / "frame_aligned_videos"
-        video_files = glob.glob(str(take_dir / "aria*.mp4"))
+        video_files = glob.glob(str(take_dir / "aria*214-1.mp4"))
+
         if len(video_files) == 0:
+            print(take_dir)
             raise FileNotFoundError(f"No video found for {video_prefix}")
         video_path = video_files[0]
 
@@ -105,19 +129,6 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
 
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # === Prepare and cache ResNet backbone ===
-        if not hasattr(self, "resnet"):
-            model_name = getattr(self.cfg, "resnet_model", "resnet18")
-            backbone = getattr(models, model_name)(weights="IMAGENET1K_V1")
-            self.resnet = torch.nn.Sequential(*list(backbone.children())[:-2]).eval()  # drop avgpool & fc
-            self.resnet.cuda() if torch.cuda.is_available() else None
-            self.resnet_transform = T.Compose([
-                T.ToPILImage(),
-                T.Resize((224, 224)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225])
-            ])
 
         # === Transform and extract ResNet features ===
         frame_tensor = self.resnet_transform(frame_rgb).unsqueeze(0)  # (1,3,224,224)
