@@ -7,7 +7,7 @@ from algorithms.common.metrics import (
     FrechetVideoDistance,
 )
 from .df_base import DiffusionForcingBase
-from utils.logging_utils import log_video, get_validation_metrics_for_simple, log_gaze_video_2d
+from utils.logging_utils import log_video, get_validation_metrics_for_simple, log_gaze_video_2d, log_real_video_with_gaze, load_raw_frames
 
 
 class DiffusionForcingScanpath(DiffusionForcingBase):
@@ -45,14 +45,15 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 resolution=self.cfg.dataset_video_resolution,
                 logger=self.logger.experiment,
             )
+            
         return output_dict
 
     def on_validation_epoch_end(self, namespace="validation") -> None:
         if not self.validation_step_outputs:
             return
 
-        # === collect predictions and ground truth ===
-        xs_pred, xs = zip(*self.validation_step_outputs)
+        xs_pred, xs, video_paths, start_idxs = zip(*self.validation_step_outputs)
+
         xs_pred = torch.cat(xs_pred, dim=1)
         xs = torch.cat(xs, dim=1)
 
@@ -75,6 +76,19 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 resolution=self.cfg.dataset_video_resolution,
                 logger=self.logger.experiment,
             )
+
+            log_real_video_with_gaze(
+                pred=xs_pred,
+                gt=xs,
+                video_paths=video_paths,
+                start_idxs=start_idxs,
+                logger=self.logger,
+                namespace=namespace,
+                step=self.global_step,
+                resolution=self.cfg.dataset_video_resolution,
+                frame_stride=self.cfg.frame_stride,
+            )
+
 
         # === compute simple metrics: MSE, PSNR, SSIM ===
         metric_dict = get_validation_metrics_for_simple(

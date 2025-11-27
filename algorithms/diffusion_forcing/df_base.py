@@ -70,7 +70,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 pg["lr"] = lr_scale * self.cfg.lr
 
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
-        xs, conditions, masks = self._preprocess_batch(batch)
+        xs, conditions, masks, _, _ = self._preprocess_batch(batch)
 
         xs_pred, loss = self.diffusion_model(xs, conditions, noise_levels=self._generate_noise_levels(xs))
         loss = self.reweight_loss(loss, masks)
@@ -92,7 +92,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation") -> STEP_OUTPUT:
-        xs, conditions, masks = self._preprocess_batch(batch)
+        xs, conditions, masks, video_paths, start_idxs = self._preprocess_batch(batch)
         n_frames, batch_size, *_ = xs.shape
         xs_pred = []
         curr_frame = 0
@@ -159,8 +159,14 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
         xs = self._unstack_and_unnormalize(xs)
         xs_pred = self._unstack_and_unnormalize(xs_pred)
-        self.validation_step_outputs.append((xs_pred.detach().cpu(), xs.detach().cpu()))
-
+        self.validation_step_outputs.append(
+            (
+                xs_pred.detach().cpu(),
+                xs.detach().cpu(),
+                video_paths,
+                start_idxs,
+            )
+        )
         return loss
 
     def test_step(self, *args: Any, **kwargs: Any) -> STEP_OUTPUT:
@@ -231,6 +237,9 @@ class DiffusionForcingBase(BasePytorchAlgo):
 
     def _preprocess_batch(self, batch):
         xs = batch[0]
+        video_paths = batch[3]      # (B,)
+        start_idxs = batch[4]       # (B,)
+
         batch_size, n_frames = xs.shape[:2]
 
         if n_frames % self.frame_stack != 0:
@@ -245,14 +254,14 @@ class DiffusionForcingBase(BasePytorchAlgo):
             conditions = batch[1]
             conditions = torch.cat([torch.zeros_like(conditions[:, :1]), conditions[:, 1:]], 1)
             conditions = rearrange(conditions, "b (t fs) d -> t b (fs d)", fs=self.frame_stack).contiguous()
-            print("USING EXTERNAL CONDITION WOO")
+            # print("USING EXTERNAL CONDITION WOO")
         else:
             conditions = [None for _ in range(n_frames)]
 
         xs = self._normalize_x(xs)
         xs = rearrange(xs, "b (t fs) c ... -> t b (fs c) ...", fs=self.frame_stack).contiguous()
 
-        return xs, conditions, masks
+        return xs, conditions, masks, video_paths, start_idxs
 
     def _normalize_x(self, xs):
         shape = [1] * (xs.ndim - self.data_mean.ndim) + list(self.data_mean.shape)

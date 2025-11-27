@@ -91,23 +91,18 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
         gaze_path = self.data_paths[file_idx]
         gaze_points = self.load_gaze_points(gaze_path)  # (T, 2)
 
-        # === Clean invalid values ===
-        valid_mask = ~np.isnan(gaze_points).any(axis=1) & ~np.isinf(gaze_points).any(axis=1)
-        gaze_points = gaze_points[valid_mask]
-        if len(gaze_points) == 0:
-            raise ValueError(f"No valid gaze data in {gaze_path}")
+        n_nans = np.isnan(gaze_points).sum()
+        n_infs = np.isinf(gaze_points).sum()
+        if n_nans > 0 or n_infs > 0:
+            print(f"[WARN] {gaze_path}: NaNs={n_nans}, Infs={n_infs}")
+            # Clean values
+            valid_mask = ~np.isnan(gaze_points).any(axis=1) & ~np.isinf(gaze_points).any(axis=1)
+            n_removed = len(gaze_points) - valid_mask.sum()
+            print(f"   → Removed {n_removed} invalid rows")
+            gaze_points = gaze_points[valid_mask]
 
-        # === Slice ===
-        end_idx = frame_idx + self.frame_stride * self.n_frames
-        if end_idx > len(gaze_points):
-            new_idx = (idx + 1) % len(self.idx_remap)
-            return self.__getitem__(new_idx)
-
-        clip_gaze = gaze_points[frame_idx:end_idx:self.frame_stride]
-        clip_gaze = clip_gaze / np.array([[self.cfg.dataset_video_resolution, self.cfg.dataset_video_resolution]])
-        clip_gaze = torch.from_numpy(clip_gaze).float()
-        clip_gaze = F.pad(clip_gaze, (0, 1), mode="constant", value=0.0)
-        clip_gaze = clip_gaze.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, self.cfg.resolution, self.cfg.resolution)
+        # slice
+        # clip = gaze_points[frame_idx : frame_idx + self.n_frames]
 
         # === Find matching video ===
         video_prefix = os.path.basename(gaze_path).replace("_general_eye_gaze_2d.csv", "")
@@ -118,6 +113,35 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
             print(take_dir)
             raise FileNotFoundError(f"No video found for {video_prefix}")
         video_path = video_files[0]
+
+        end_idx = frame_idx + self.frame_stride * self.n_frames
+
+        end_idx = frame_idx + self.frame_stride * self.n_frames
+        if end_idx > len(gaze_points):
+            # not enough data left for a full clip → skip
+            new_idx = (idx + 1) % len(self.idx_remap)
+            return self.__getitem__(new_idx)
+        
+        
+        # normal slicing (only valid length clips)
+        clip = gaze_points[frame_idx:end_idx:self.frame_stride]
+
+        nonterminal = np.ones(self.n_frames)
+
+        # normalize if needed
+        clip = clip / np.array([[self.cfg.dataset_video_resolution, self.cfg.dataset_video_resolution]])
+
+        # convert to tensor
+        clip = torch.from_numpy(clip).float()  # (T, 2)
+
+        # pad to 3 channels (x, y, dummy)
+        clip = F.pad(clip, (0, 1), mode="constant", value=0.0)  # (T, 3)
+
+        # add spatial dims
+        clip = clip.unsqueeze(-1).unsqueeze(-1)      # (T, 3, 1, 1)
+        clip = clip.repeat(1, 1, self.cfg.resolution, self.cfg.resolution)
+
+        clip = clip.contiguous()
 
         # === Load only the first frame of this clip ===
         cap = cv2.VideoCapture(video_path)
@@ -142,15 +166,13 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
 
         # === Flatten spatial dims to get action condition ===
         feat_flat = F.adaptive_avg_pool2d(feat_map, (1, 1)).squeeze().float()  # (C,)
-        action_condition = feat_flat.unsqueeze(0).repeat(clip_gaze[::self.frame_skip].shape[0], 1)
-
-
-        # === Nonterminal ===
-        nonterminal = torch.ones(clip_gaze.shape[0])
+        action_condition = feat_flat.unsqueeze(0).repeat(clip[::self.frame_skip].shape[0], 1)
 
         # === Return tuple ===
         return (
-            clip_gaze[:: self.frame_skip],      # (T', 3, res, res)
+            clip[:: self.frame_skip],      # (T', 3, res, res)
             action_condition,                   # (T', 512)
-            nonterminal,                        # (T',)
+            torch.from_numpy(nonterminal[:: self.frame_skip]).float(),
+            video_path,
+            int(frame_idx)
         )

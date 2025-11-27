@@ -11,7 +11,7 @@ import matplotlib.animation as animation
 from pathlib import Path
 import os
 import imageio
-
+import csv
 plt.set_loglevel("warning")
 
 from torchmetrics.functional import mean_squared_error, peak_signal_noise_ratio
@@ -186,6 +186,178 @@ def log_gaze_video_2d(
         # except Exception as e:
         #     print(f"[WARN] wandb.Video failed ({e}). Saved only: {local_path}")
 
+
+def log_real_video_with_gaze(
+    pred,
+    gt,
+    video_paths,
+    start_idxs,
+    logger,
+    namespace="validation_real",
+    step=0,
+    resolution=1408,
+    frame_stride=1,
+    local_downscale=1,
+    fps=30,
+    dot_radius=20,
+):
+    """
+    Real-video overlay logger matching the SAME API as log_gaze_video_2d:
+
+        pred: (T, B, 3, H, W)
+        gt:   (T, B, 3, H, W)
+        video_paths: list/tuple of length B
+        start_idxs:  list/tuple of length B
+
+    Creates one MP4 per batch element with gaze overlaid on real RGB frames.
+    """
+    if not logger:
+        logger = wandb
+
+    wandb_dir = logger.experiment.dir if hasattr(logger, "experiment") else (
+        wandb.run.dir if wandb.run is not None else os.getcwd()
+    )
+
+    pred_np = pred.detach().cpu().numpy()
+
+    gt_np   = gt.detach().cpu().numpy()
+    print(gt_np.shape)
+
+    T, B = pred_np.shape[:2]
+    res = int(resolution)
+
+    # Precompute gaze points exactly like log_gaze_video_2d
+    pred_xy = np.clip(pred_np[:, :, :2].mean(axis=(-1, -2)) * res, 0, res - 1)   # (T, B, 2)
+    gt_xy   = np.clip(gt_np[:, :, :2].mean(axis=(-1, -2)) * res, 0, res - 1)
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    thickness = 2
+
+    if len(video_paths) == 1 and isinstance(video_paths[0], (list, tuple)):
+        video_paths = video_paths[0]
+
+    if len(start_idxs) == 1 and torch.is_tensor(start_idxs[0]):
+        start_idxs = start_idxs[0]
+
+
+    # === Loop over batch elements ===
+    for b in range(B):
+
+        # --- Extract correct video path ---
+        vid_path = video_paths[b]
+        if isinstance(vid_path, (list, tuple)):
+            vid_path = vid_path[0]
+        if isinstance(vid_path, torch.Tensor):
+            vid_path = vid_path[0].item() if vid_path.numel() > 1 else vid_path.item()
+        vid_path = str(vid_path)
+
+        # --- Extract start idx ---
+        s_idx = start_idxs[b]
+        if isinstance(s_idx, (list, tuple)):
+            s_idx = s_idx[0]
+        if isinstance(s_idx, torch.Tensor):
+            s_idx = s_idx[0].item() if s_idx.numel() > 1 else s_idx.item()
+        start_idx = int(s_idx)
+
+        # --- Load raw RGB frames ---
+        raw_frames = load_raw_frames(
+            vid_path,
+            start_idx=start_idx,
+            T=T,
+            frame_stride=frame_stride,
+        )   # (T, H, W, 3)
+
+        H, W = res, res
+        out_h, out_w = int(H * local_downscale), int(W * local_downscale)
+
+        # Writer
+        save_path = os.path.join(
+            wandb_dir,
+            f"realgaze_{namespace}_step{step}_b{b}.mp4"
+        )
+        writer = imageio.get_writer(save_path, fps=fps, codec="libx264", quality=7)
+
+        # === Write frames ===
+        for t in range(T):
+            frame = (raw_frames[t] * 255).astype(np.uint8)
+            frame = cv2.resize(frame, (out_w, out_h))
+
+            # Convert normalized coords
+            px_pred = int(pred_xy[t, b, 0] * (out_w / res))
+            py_pred = int(pred_xy[t, b, 1] * (out_h / res))
+
+            px_gt   = int(gt_xy[t, b, 0]   * (out_w / res))
+            py_gt   = int(gt_xy[t, b, 1]   * (out_h / res))
+
+            # Draw
+            cv2.circle(frame, (px_pred, py_pred), dot_radius, (255, 0, 0), -1)
+            cv2.circle(frame, (px_gt,   py_gt),   dot_radius, (0, 0, 255), -1)
+
+            # === Text overlays with white background ===
+            # 1. Legend
+            legend = "GT = Blue / Pred = Red"
+            (tx_w, tx_h), base = cv2.getTextSize(legend, font, font_scale, thickness)
+            x, y = 20, 40
+            cv2.rectangle(frame,
+                        (x, y - tx_h - base),
+                        (x + tx_w + 6, y + 6),
+                        (255, 255, 255),
+                        -1)
+            cv2.putText(frame, legend, (x + 3, y),
+                        font, font_scale, (0, 0, 0), thickness)
+            parts = vid_path.split("\\")
+            short = "\\".join(parts[-3::2])  # take folder just above frame_aligned_videos + filename
+
+            # 2. Filename + start idx
+            info = f"{short}  start={start_idx}"
+            (tx_w, tx_h), base = cv2.getTextSize(info, font, font_scale, thickness)
+            x, y = 20, 80
+            cv2.rectangle(frame,
+                        (x, y - tx_h - base),
+                        (x + tx_w + 6, y + 6),
+                        (255, 255, 255),
+                        -1)
+            cv2.putText(frame, info, (x + 3, y),
+                        font, font_scale, (0, 0, 0), thickness)
+
+            # 3. Frame index
+            t_text = f"t={t:03d}"
+            (tx_w, tx_h), base = cv2.getTextSize(t_text, font, font_scale, thickness)
+            x = out_w - tx_w - 20
+            y = 40
+            cv2.rectangle(frame,
+                        (x, y - tx_h - base),
+                        (x + tx_w + 6, y + 6),
+                        (255, 255, 255),
+                        -1)
+            cv2.putText(frame, t_text, (x + 3, y),
+                        font, font_scale, (0, 0, 0), thickness)
+
+
+            writer.append_data(frame)
+
+        writer.close()
+
+
+def load_raw_frames(video_path: str, start_idx: int, T: int, frame_stride: int):
+    cap = cv2.VideoCapture(video_path)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
+
+    frames = []
+    for _ in range(T):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frames.append(rgb)
+
+        if frame_stride > 1:
+            cap.set(cv2.CAP_PROP_POS_FRAMES,
+                    cap.get(cv2.CAP_PROP_POS_FRAMES) + (frame_stride - 1))
+
+    cap.release()
+    return np.stack(frames) / 255.0   # (T, H, W, 3)
 
 def get_validation_metrics_for_videos(
     observation_hat,

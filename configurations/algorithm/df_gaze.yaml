@@ -3,6 +3,8 @@ defaults:
 
 n_frames: ${dataset.n_frames}
 frame_skip: ${dataset.frame_skip}
+frame_stride: ${dataset.frame_stride}
+
 metadata: ${dataset.metadata}
 dataset_video_resolution: ${dataset.dataset_video_resolution}
 

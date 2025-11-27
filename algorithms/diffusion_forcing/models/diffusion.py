@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from einops import rearrange
-from .unet3d import Unet3D
+from .unet3d_condition import Unet3D
 from .transformer import Transformer
 from .utils import linear_beta_schedule, cosine_beta_schedule, sigmoid_beta_schedule, extract, EinopsWrapper
 

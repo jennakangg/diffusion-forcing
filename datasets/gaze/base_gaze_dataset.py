@@ -9,6 +9,7 @@ from abc import abstractmethod, ABC
 import json
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import glob
 
 
 class BaseGazeDataset(torch.utils.data.Dataset, ABC):
@@ -111,6 +112,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         file_idx, frame_idx = self.split_idx(idx)
         gaze_path = self.data_paths[file_idx]
         gaze_points = self.load_gaze_points(gaze_path)  # (T, 2)
+        gaze_points = np.nan_to_num(gaze_points, nan=0.0, posinf=0.0, neginf=0.0)
 
         n_nans = np.isnan(gaze_points).sum()
         n_infs = np.isinf(gaze_points).sum()
@@ -124,6 +126,16 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
 
         # slice
         # clip = gaze_points[frame_idx : frame_idx + self.n_frames]
+
+        # === Find matching video ===
+        video_prefix = os.path.basename(gaze_path).replace("_general_eye_gaze_2d.csv", "")
+        take_dir = Path(self.cfg.takes_root) / video_prefix / "frame_aligned_videos"
+        video_files = glob.glob(str(take_dir / "aria*214-1.mp4"))
+
+        if len(video_files) == 0:
+            print(take_dir)
+            raise FileNotFoundError(f"No video found for {video_prefix}")
+        video_path = video_files[0]
 
         end_idx = frame_idx + self.frame_stride * self.n_frames
 
@@ -140,7 +152,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         nonterminal = np.ones(self.n_frames)
 
         # normalize if needed
-        clip = clip / np.array([[self.cfg.dataset_video_resolution, self.cfg.dataset_video_resolution]])
+        clip = clip / self.cfg.dataset_video_resolution
 
         # convert to tensor
         clip = torch.from_numpy(clip).float()  # (T, 2)
@@ -153,55 +165,21 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         clip = clip.repeat(1, 1, self.cfg.resolution, self.cfg.resolution)
 
         clip = clip.contiguous()
+        
+        T_prime = clip[:: self.frame_skip].shape[0]
 
-        # === Debug Visualization ===
-        # if self.plot_counter < 5:
-        #     base_name = os.path.splitext(os.path.basename(gaze_path))[0]
+        abs_video_idx = np.arange(T_prime) * (self.frame_stride * self.frame_skip) + frame_idx
 
-        #     # --- Save gaze points to CSV ---
-        #     csv_path = os.path.join(self.debug_dir, f"{base_name}_gaze_points.csv")
-        #     df = pd.DataFrame(gaze_points, columns=["x", "y"])
-        #     df.to_csv(csv_path, index_label="frame")
-        #     print(f"[INFO] Saved gaze CSV → {csv_path}")
+        print(clip[:: self.frame_skip].shape)
 
-        #     # --- Plot 1: Time vs X/Y ---
-        #     time_axis = np.arange(len(gaze_points))
-        #     plt.figure(figsize=(8, 4))
-        #     plt.plot(time_axis, gaze_points[:, 0], label="x-coordinate", color="r", alpha=0.7)
-        #     plt.plot(time_axis, gaze_points[:, 1], label="y-coordinate", color="b", alpha=0.7)
-        #     plt.xlabel("Frame index (time)")
-        #     plt.ylabel("Gaze position (pixels)")
-        #     plt.title(f"Gaze trajectory over time: {base_name}")
-        #     plt.legend()
-        #     plt.tight_layout()
-        #     time_plot_path = os.path.join(self.debug_dir, f"{base_name}_time_plot.png")
-        #     plt.savefig(time_plot_path)
-        #     plt.close()
-        #     print(f"[INFO] Saved time plot → {time_plot_path}")
-
-        #     # --- Plot 2: 2D XY Path ---
-        #     plt.figure(figsize=(5, 5))
-        #     plt.plot(gaze_points[:, 0], gaze_points[:, 1], '-', color='k', alpha=0.8, lw=1)
-        #     plt.scatter(gaze_points[0, 0], gaze_points[0, 1], color='green', s=40, label='start')
-        #     plt.scatter(gaze_points[-1, 0], gaze_points[-1, 1], color='red', s=40, label='end')
-        #     plt.xlabel("x position (pixels)")
-        #     plt.ylabel("y position (pixels)")
-        #     plt.title(f"Gaze 2D path: {base_name}")
-        #     plt.legend()
-        #     plt.gca().invert_yaxis()
-        #     plt.axis("equal")
-        #     plt.tight_layout()
-        #     path_plot_path = os.path.join(self.debug_dir, f"{base_name}_xy_path.png")
-        #     plt.savefig(path_plot_path)
-        #     plt.close()
-        #     print(f"[INFO] Saved XY path plot → {path_plot_path}")
-
-        #     self.plot_counter += 1
 
         return (
-            clip[:: self.frame_skip],                         # (T', 3, 1, 1)
-            torch.zeros((clip[:: self.frame_skip].shape[0],)), # dummy actions if needed
+            clip[:: self.frame_skip],
+            torch.zeros((T_prime,)),
             torch.from_numpy(nonterminal[:: self.frame_skip]).float(),
+            video_path,
+            torch.from_numpy(abs_video_idx).long(),
         )
+
 
 
