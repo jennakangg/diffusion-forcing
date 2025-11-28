@@ -37,13 +37,25 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 namespace="training_vis",
                 logger=self.logger.experiment,
             )
-            log_gaze_video_2d(
+            # log_gaze_video_2d(
+            #     output_dict["xs_pred"],
+            #     output_dict["xs"],
+            #     step=self.global_step,
+            #     namespace="training_vis_2d",
+            #     resolution=self.cfg.dataset_video_resolution,
+            #     logger=self.logger.experiment,
+            # )
+            log_real_video_with_gaze(
                 output_dict["xs_pred"],
                 output_dict["xs"],
+                raw_gaze=output_dict["raw_gaze"],
+                video_paths=output_dict["video_paths"],
+                start_idxs=output_dict["start_idxs"],
+                logger=self.logger,
+                namespace="training_vis",
                 step=self.global_step,
-                namespace="training_vis_2d",
                 resolution=self.cfg.dataset_video_resolution,
-                logger=self.logger.experiment,
+                frame_stride=self.cfg.frame_stride,
             )
             
         return output_dict
@@ -52,7 +64,7 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
         if not self.validation_step_outputs:
             return
 
-        xs_pred, xs, video_paths, start_idxs = zip(*self.validation_step_outputs)
+        xs_pred, xs, video_paths, start_idxs, raw_gaze = zip(*self.validation_step_outputs)
 
         xs_pred = torch.cat(xs_pred, dim=1)
         xs = torch.cat(xs, dim=1)
@@ -68,18 +80,19 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 logger=self.logger.experiment,
             )
 
-            log_gaze_video_2d(
-                pred=xs_pred,
-                gt=xs,
-                step=None if namespace == "test" else self.global_step,
-                namespace=f"{namespace}_vis_2d",
-                resolution=self.cfg.dataset_video_resolution,
-                logger=self.logger.experiment,
-            )
+            # log_gaze_video_2d(
+            #     pred=xs_pred,
+            #     gt=xs,
+            #     step=None if namespace == "test" else self.global_step,
+            #     namespace=f"{namespace}_vis_2d",
+            #     resolution=self.cfg.dataset_video_resolution,
+            #     logger=self.logger.experiment,
+            # )
 
             log_real_video_with_gaze(
                 pred=xs_pred,
                 gt=xs,
+                raw_gaze=raw_gaze,
                 video_paths=video_paths,
                 start_idxs=start_idxs,
                 logger=self.logger,

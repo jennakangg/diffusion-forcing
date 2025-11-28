@@ -172,24 +172,10 @@ def log_gaze_video_2d(
 
         video_writer.close()
 
-        # === Prepare a smaller version for wandb ===
-        # try:
-        #     video_small = np.stack([
-        #         cv2.resize(cv2.imread(local_path)[..., ::-1], (res_wandb, res_wandb))
-        #         for _ in range(1)  # just to ensure shape for wandb
-        #     ], axis=0)
-
-        #     logger.log({
-        #         f"{namespace}/{prefix}_b{b}": wandb.Video(local_path, fps=fps, format="mp4"),
-        #         "trainer/global_step": step,
-        #     })
-        # except Exception as e:
-        #     print(f"[WARN] wandb.Video failed ({e}). Saved only: {local_path}")
-
-
 def log_real_video_with_gaze(
     pred,
     gt,
+    raw_gaze,
     video_paths,
     start_idxs,
     logger,
@@ -198,7 +184,7 @@ def log_real_video_with_gaze(
     resolution=1408,
     frame_stride=1,
     local_downscale=1,
-    fps=30,
+    fps=10,
     dot_radius=20,
 ):
     """
@@ -221,7 +207,9 @@ def log_real_video_with_gaze(
     pred_np = pred.detach().cpu().numpy()
 
     gt_np   = gt.detach().cpu().numpy()
-    print(gt_np.shape)
+    raw_np = raw_gaze.detach().cpu().numpy()  # (T, B, 2)
+
+    print(raw_np.shape)
 
     T, B = pred_np.shape[:2]
     res = int(resolution)
@@ -289,6 +277,16 @@ def log_real_video_with_gaze(
 
             px_gt   = int(gt_xy[t, b, 0]   * (out_w / res))
             py_gt   = int(gt_xy[t, b, 1]   * (out_h / res))
+            print("T")
+            print(t)
+
+            print("B")
+            print(b)
+            # raw_gt_xy gives TRUE pixel coords
+            raw_x = int(raw_np[t, b, 0])
+            raw_y = int(raw_np[t, b, 1])
+
+            cv2.circle(frame, (raw_x, raw_y), dot_radius, (0, 255, 0), -1)
 
             # Draw
             cv2.circle(frame, (px_pred, py_pred), dot_radius, (255, 0, 0), -1)
@@ -296,7 +294,7 @@ def log_real_video_with_gaze(
 
             # === Text overlays with white background ===
             # 1. Legend
-            legend = "GT = Blue / Pred = Red"
+            legend = "GT = Blue / Pred = Red / Raw = Green"
             (tx_w, tx_h), base = cv2.getTextSize(legend, font, font_scale, thickness)
             x, y = 20, 40
             cv2.rectangle(frame,

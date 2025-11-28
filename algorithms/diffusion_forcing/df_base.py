@@ -70,7 +70,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 pg["lr"] = lr_scale * self.cfg.lr
 
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
-        xs, conditions, masks, _, _ = self._preprocess_batch(batch)
+        xs, conditions, masks, video_paths, start_idxs, raw_gaze = self._preprocess_batch(batch)
 
         xs_pred, loss = self.diffusion_model(xs, conditions, noise_levels=self._generate_noise_levels(xs))
         loss = self.reweight_loss(loss, masks)
@@ -86,13 +86,16 @@ class DiffusionForcingBase(BasePytorchAlgo):
             "loss": loss,
             "xs_pred": xs_pred,
             "xs": xs,
+            "video_paths": video_paths,
+            "start_idxs": start_idxs, 
+            "raw_gaze": raw_gaze
         }
 
         return output_dict
 
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, namespace="validation") -> STEP_OUTPUT:
-        xs, conditions, masks, video_paths, start_idxs = self._preprocess_batch(batch)
+        xs, conditions, masks, video_paths, start_idxs, raw_gaze = self._preprocess_batch(batch)
         n_frames, batch_size, *_ = xs.shape
         xs_pred = []
         curr_frame = 0
@@ -165,6 +168,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 xs.detach().cpu(),
                 video_paths,
                 start_idxs,
+                raw_gaze
             )
         )
         return loss
@@ -239,6 +243,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         xs = batch[0]
         video_paths = batch[3]      # (B,)
         start_idxs = batch[4]       # (B,)
+        raw_gaze = batch[5]
 
         batch_size, n_frames = xs.shape[:2]
 
@@ -261,7 +266,7 @@ class DiffusionForcingBase(BasePytorchAlgo):
         xs = self._normalize_x(xs)
         xs = rearrange(xs, "b (t fs) c ... -> t b (fs c) ...", fs=self.frame_stack).contiguous()
 
-        return xs, conditions, masks, video_paths, start_idxs
+        return xs, conditions, masks, video_paths, start_idxs, raw_gaze
 
     def _normalize_x(self, xs):
         shape = [1] * (xs.ndim - self.data_mean.ndim) + list(self.data_mean.shape)

@@ -150,6 +150,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         clip = gaze_points[frame_idx:end_idx:self.frame_stride]
 
         nonterminal = np.ones(self.n_frames)
+        raw_clip = gaze_points[frame_idx:end_idx:self.frame_stride].copy()  # (T,2)
 
         # normalize if needed
         clip = clip / self.cfg.dataset_video_resolution
@@ -179,6 +180,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
             torch.from_numpy(nonterminal[:: self.frame_skip]).float(),
             video_path,
             torch.from_numpy(abs_video_idx).long(),
+            torch.from_numpy(raw_clip[:: self.frame_skip]).float(),  # NEW: raw gaze for debugging
         )
 
 

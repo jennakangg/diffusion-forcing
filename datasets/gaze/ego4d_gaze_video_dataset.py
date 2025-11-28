@@ -125,6 +125,7 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
         
         # normal slicing (only valid length clips)
         clip = gaze_points[frame_idx:end_idx:self.frame_stride]
+        raw_clip = gaze_points[frame_idx:end_idx:self.frame_stride].copy()  # (T,2)
 
         nonterminal = np.ones(self.n_frames)
 
@@ -174,5 +175,6 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
             action_condition,                   # (T', 512)
             torch.from_numpy(nonterminal[:: self.frame_skip]).float(),
             video_path,
-            int(frame_idx)
+            int(frame_idx),
+            torch.from_numpy(raw_clip[:: self.frame_skip]).float()
         )
