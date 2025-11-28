@@ -184,7 +184,7 @@ def log_real_video_with_gaze(
     resolution=1408,
     frame_skip=1,
     local_downscale=1,
-    fps=10,
+    fps=30,
     dot_radius=20,
 ):
     """
@@ -205,13 +205,15 @@ def log_real_video_with_gaze(
     )
 
     pred_np = pred.detach().cpu().numpy()
-
     gt_np   = gt.detach().cpu().numpy()
+
+    if len(raw_gaze) == 1:
+        raw_gaze = raw_gaze[0]
     raw_np = raw_gaze.detach().cpu().numpy()  # (T, B, 2)
+    raw_np = raw_np.transpose(1, 0, 2)
 
-    print(raw_np.shape)
-
-    T, B = pred_np.shape[:2]
+   
+    T, B = gt_np.shape[:2]
     res = int(resolution)
 
     # Precompute gaze points exactly like log_gaze_video_2d
@@ -277,11 +279,7 @@ def log_real_video_with_gaze(
 
             px_gt   = int(gt_xy[t, b, 0]   * (out_w / res))
             py_gt   = int(gt_xy[t, b, 1]   * (out_h / res))
-            print("T")
-            print(t)
-
-            print("B")
-            print(b)
+   
             # raw_gt_xy gives TRUE pixel coords
             raw_x = int(raw_np[t, b, 0])
             raw_y = int(raw_np[t, b, 1])
