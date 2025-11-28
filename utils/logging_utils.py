@@ -182,7 +182,7 @@ def log_real_video_with_gaze(
     namespace="validation_real",
     step=0,
     resolution=1408,
-    frame_stride=1,
+    frame_skip=1,
     local_downscale=1,
     fps=10,
     dot_radius=20,
@@ -253,7 +253,7 @@ def log_real_video_with_gaze(
             vid_path,
             start_idx=start_idx,
             T=T,
-            frame_stride=frame_stride,
+            frame_skip=frame_skip,
         )   # (T, H, W, 3)
 
         H, W = res, res
@@ -338,7 +338,7 @@ def log_real_video_with_gaze(
         writer.close()
 
 
-def load_raw_frames(video_path: str, start_idx: int, T: int, frame_stride: int):
+def load_raw_frames(video_path: str, start_idx: int, T: int, frame_skip: int):
     cap = cv2.VideoCapture(video_path)
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
 
@@ -350,9 +350,9 @@ def load_raw_frames(video_path: str, start_idx: int, T: int, frame_stride: int):
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frames.append(rgb)
 
-        if frame_stride > 1:
+        if frame_skip > 1:
             cap.set(cv2.CAP_PROP_POS_FRAMES,
-                    cap.get(cv2.CAP_PROP_POS_FRAMES) + (frame_stride - 1))
+                    cap.get(cv2.CAP_PROP_POS_FRAMES) + (frame_skip - 1))
 
     cap.release()
     return np.stack(frames) / 255.0   # (T, H, W, 3)

@@ -29,7 +29,6 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         self.cfg = cfg
         self.split = split
         self.save_dir = Path(cfg.save_dir)
-        self.frame_stride = cfg.frame_stride
         self.split_dir = self.save_dir / split
         self.save_dir.mkdir(exist_ok=True, parents=True)
         self.plot_counter = 0 
@@ -137,9 +136,9 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
             raise FileNotFoundError(f"No video found for {video_prefix}")
         video_path = video_files[0]
 
-        end_idx = frame_idx + self.frame_stride * self.n_frames
+        end_idx = frame_idx + self.frame_skip * self.n_frames
 
-        end_idx = frame_idx + self.frame_stride * self.n_frames
+        end_idx = frame_idx + self.frame_skip * self.n_frames
         if end_idx > len(gaze_points):
             # not enough data left for a full clip → skip
             new_idx = (idx + 1) % len(self.idx_remap)
@@ -147,10 +146,10 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         
         
         # normal slicing (only valid length clips)
-        clip = gaze_points[frame_idx:end_idx:self.frame_stride]
+        clip = gaze_points[frame_idx:end_idx]
 
         nonterminal = np.ones(self.n_frames)
-        raw_clip = gaze_points[frame_idx:end_idx:self.frame_stride].copy()  # (T,2)
+        raw_clip = gaze_points[frame_idx:end_idx].copy()  # (T,2)
 
         # normalize if needed
         clip = clip / self.cfg.dataset_video_resolution
@@ -169,7 +168,7 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         
         T_prime = clip[:: self.frame_skip].shape[0]
 
-        abs_video_idx = np.arange(T_prime) * (self.frame_stride * self.frame_skip) + frame_idx
+        abs_video_idx = np.arange(T_prime) * (self.frame_skip) + frame_idx
 
         print(clip[:: self.frame_skip].shape)
 

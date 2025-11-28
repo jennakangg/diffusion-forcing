@@ -114,9 +114,9 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
             raise FileNotFoundError(f"No video found for {video_prefix}")
         video_path = video_files[0]
 
-        end_idx = frame_idx + self.frame_stride * self.n_frames
+        end_idx = frame_idx + self.frame_skip * self.n_frames
 
-        end_idx = frame_idx + self.frame_stride * self.n_frames
+        end_idx = frame_idx + self.frame_skip * self.n_frames
         if end_idx > len(gaze_points):
             # not enough data left for a full clip → skip
             new_idx = (idx + 1) % len(self.idx_remap)
@@ -124,8 +124,8 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
         
         
         # normal slicing (only valid length clips)
-        clip = gaze_points[frame_idx:end_idx:self.frame_stride]
-        raw_clip = gaze_points[frame_idx:end_idx:self.frame_stride].copy()  # (T,2)
+        clip = gaze_points[frame_idx:end_idx]
+        raw_clip = gaze_points[frame_idx:end_idx].copy()  # (T,2)
 
         nonterminal = np.ones(self.n_frames)
 

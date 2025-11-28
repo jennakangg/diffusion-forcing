@@ -10,6 +10,5 @@ external_cond_dim: 0
 context_length: 20
 frame_skip: 1
 validation_multiplier: 1
-frame_stride: 1
 dataset_video_resolution: 1408
 takes_root: C:\Users\jk8659\NYU\research\Scanpath\reimpl\diffusion-forcing\data\ego4d_full\takes

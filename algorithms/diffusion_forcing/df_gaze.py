@@ -55,7 +55,7 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 namespace="training_vis",
                 step=self.global_step,
                 resolution=self.cfg.dataset_video_resolution,
-                frame_stride=self.cfg.frame_stride,
+                frame_skip=self.cfg.frame_skip,
             )
             
         return output_dict
@@ -99,7 +99,7 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 namespace=namespace,
                 step=self.global_step,
                 resolution=self.cfg.dataset_video_resolution,
-                frame_stride=self.cfg.frame_stride,
+                frame_skip=self.cfg.frame_skip,
             )
 
 
