@@ -21,6 +21,8 @@ from utils.print_utils import cyan
 from utils.ckpt_utils import download_latest_checkpoint, is_run_id
 from utils.cluster_utils import submit_slurm_job
 from utils.distributed_utils import is_rank_zero
+import os
+os.environ["PYTORCH_SDP_DISABLE_FLASH"] = "1"
 
 def run_local(cfg: DictConfig):
     # delay some imports in case they are not needed in non-local envs for submission

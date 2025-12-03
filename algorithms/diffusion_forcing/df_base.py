@@ -18,6 +18,7 @@ from lightning.pytorch.utilities.types import STEP_OUTPUT
 
 from algorithms.common.base_pytorch_algo import BasePytorchAlgo
 from .models.diffusion import Diffusion
+from utils.logging_utils import  log_real_video_with_gaze
 
 
 class DiffusionForcingBase(BasePytorchAlgo):

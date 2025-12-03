@@ -168,7 +168,7 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
         # === Flatten spatial dims to get action condition ===
         feat_flat = F.adaptive_avg_pool2d(feat_map, (1, 1)).squeeze().float()  # (C,)
         action_condition = feat_flat.unsqueeze(0).repeat(clip[::self.frame_skip].shape[0], 1)
-
+        # print("dataset_video_resolution", self.cfg.dataset_video_resolution, raw_clip[0], clip[0,0,0,0]*self.cfg.dataset_video_resolution)
         # === Return tuple ===
         return (
             clip[:: self.frame_skip],      # (T', 3, res, res)

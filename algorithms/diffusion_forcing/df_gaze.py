@@ -28,6 +28,7 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
 
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
         output_dict = super().training_step(batch, batch_idx)
+
         # log the video
         if batch_idx % 5000 == 0 and self.logger:
             log_video(

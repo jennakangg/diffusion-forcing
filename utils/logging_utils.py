@@ -183,7 +183,7 @@ def log_real_video_with_gaze(
     step=0,
     resolution=1408,
     frame_skip=1,
-    local_downscale=1,
+    local_downscale=.5,
     fps=30,
     dot_radius=20,
 ):
@@ -219,10 +219,18 @@ def log_real_video_with_gaze(
     # Precompute gaze points exactly like log_gaze_video_2d
     pred_xy = np.clip(pred_np[:, :, :2].mean(axis=(-1, -2)) * res, 0, res - 1)   # (T, B, 2)
     gt_xy   = np.clip(gt_np[:, :, :2].mean(axis=(-1, -2)) * res, 0, res - 1)
+    print("\n---- LOGGER DEBUG ----")
+    print("gt_xy[0,0]:", gt_xy[0,0])
+    print("raw_np[0,0]:", raw_np[0,0])
+    print("diff:", gt_xy[0,0] - raw_np[0,0])
+    print("----------------------\n")
+
 
     font = cv2.FONT_HERSHEY_SIMPLEX
     font_scale = 0.6
     thickness = 2
+
+    print(raw_np[0,0], gt_xy[0,0])
 
     if len(video_paths) == 1 and isinstance(video_paths[0], (list, tuple)):
         video_paths = video_paths[0]
@@ -281,18 +289,18 @@ def log_real_video_with_gaze(
             py_gt   = int(gt_xy[t, b, 1]   * (out_h / res))
    
             # raw_gt_xy gives TRUE pixel coords
-            raw_x = int(raw_np[t, b, 0])
-            raw_y = int(raw_np[t, b, 1])
+            raw_x = int(raw_np[t, b, 0]   * (out_h / res))
+            raw_y = int(raw_np[t, b, 1]   * (out_h / res))
 
             cv2.circle(frame, (raw_x, raw_y), dot_radius, (0, 255, 0), -1)
 
             # Draw
             cv2.circle(frame, (px_pred, py_pred), dot_radius, (255, 0, 0), -1)
-            cv2.circle(frame, (px_gt,   py_gt),   dot_radius, (0, 0, 255), -1)
+            # cv2.circle(frame, (px_gt,   py_gt),   dot_radius, (0, 0, 255), -1)
 
             # === Text overlays with white background ===
             # 1. Legend
-            legend = "GT = Blue / Pred = Red / Raw = Green"
+            legend = "Pred = Red / GT = Green"
             (tx_w, tx_h), base = cv2.getTextSize(legend, font, font_scale, thickness)
             x, y = 20, 40
             cv2.rectangle(frame,

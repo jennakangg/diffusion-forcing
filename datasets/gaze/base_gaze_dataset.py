@@ -169,10 +169,6 @@ class BaseGazeDataset(torch.utils.data.Dataset, ABC):
         T_prime = clip[:: self.frame_skip].shape[0]
 
         abs_video_idx = np.arange(T_prime) * (self.frame_skip) + frame_idx
-
-        print(clip[:: self.frame_skip].shape)
-
-
         return (
             clip[:: self.frame_skip],
             torch.zeros((T_prime,)),
