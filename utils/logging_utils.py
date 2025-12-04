@@ -432,16 +432,34 @@ def get_validation_metrics_for_simple(
 
     :return: a tuple of metrics
     """
+
     frame, batch, channel, height, width = observation_hat.shape
     output_dict = {}
-    observation_gt = observation_gt.type_as(observation_hat)  # some metrics don't fully support fp16
+    observation_gt = observation_gt.type_as(observation_hat)  # ensures dtype compatibility
 
-    # reshape to (frame * batch, channel, height, width) for image losses
-    observation_hat = observation_hat.view(-1, channel, height, width)
-    observation_gt = observation_gt.view(-1, channel, height, width)
+    # reshape to (frame * batch, channel, height, width)
+    observation_hat = observation_hat.reshape(-1, channel, height, width)
+    observation_gt  = observation_gt.reshape(-1, channel, height, width)
 
-    output_dict["mse"] = mean_squared_error(observation_hat, observation_gt)
-    output_dict["psnr"] = peak_signal_noise_ratio(observation_hat, observation_gt, data_range=2.0)
-    output_dict["ssim"] = structural_similarity_index_measure(observation_hat, observation_gt, data_range=2.0)
+    # -------------------------------
+    # 1. MSE
+    # -------------------------------
+    output_dict["mse"] = torch.mean((observation_hat - observation_gt) ** 2)
+
+    # -------------------------------
+    # 2. Absolute Error (normalized)
+    #    mean |pred - gt|
+    # -------------------------------
+    output_dict["abs_error_norm"] = torch.mean(torch.abs(observation_hat - observation_gt))
+
+    # -------------------------------
+    # 3. Absolute Pixel Error
+    #    multiply both pred and gt by 1408 first
+    # -------------------------------
+    scale = 1408.0
+    hat_px = observation_hat * scale
+    gt_px  = observation_gt * scale
+
+    output_dict["abs_pixel_error"] = torch.mean(torch.abs(hat_px - gt_px))
 
     return output_dict

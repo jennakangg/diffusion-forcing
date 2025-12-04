@@ -13,7 +13,7 @@ warmup_steps: 10000
 optimizer_beta: [0.9, 0.99]
 diffusion:
   # training
-  beta_schedule: sigmoid
+  beta_schedule: linear
   objective: pred_x0
   use_fused_snr: True
   cum_snr_decay: 0.96

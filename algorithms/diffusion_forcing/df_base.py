@@ -169,7 +169,8 @@ class DiffusionForcingBase(BasePytorchAlgo):
                 xs.detach().cpu(),
                 video_paths,
                 start_idxs,
-                raw_gaze
+                raw_gaze, 
+                batch_idx
             )
         )
         return loss

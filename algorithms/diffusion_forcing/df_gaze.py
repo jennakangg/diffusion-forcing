@@ -28,24 +28,16 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
 
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
         output_dict = super().training_step(batch, batch_idx)
-
+        namespace = "training_vis"
         # log the video
         if batch_idx % 5000 == 0 and self.logger:
             log_video(
                 output_dict["xs_pred"],
                 output_dict["xs"],
                 step=self.global_step,
-                namespace="training_vis",
+                namespace=namespace,
                 logger=self.logger.experiment,
             )
-            # log_gaze_video_2d(
-            #     output_dict["xs_pred"],
-            #     output_dict["xs"],
-            #     step=self.global_step,
-            #     namespace="training_vis_2d",
-            #     resolution=self.cfg.dataset_video_resolution,
-            #     logger=self.logger.experiment,
-            # )
             log_real_video_with_gaze(
                 output_dict["xs_pred"],
                 output_dict["xs"],
@@ -53,25 +45,39 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 video_paths=output_dict["video_paths"],
                 start_idxs=output_dict["start_idxs"],
                 logger=self.logger,
-                namespace="training_vis",
+                namespace=namespace,
                 step=self.global_step,
                 resolution=self.cfg.dataset_video_resolution,
                 frame_skip=self.cfg.frame_skip,
             )
-            
+        if batch_idx % 100 == 0 and self.logger:
+            print("TRAIN METRICS")
+            # === compute simple metrics: MSE, PSNR, SSIM ===
+            metric_dict = get_validation_metrics_for_simple(
+                output_dict["xs_pred"],
+                output_dict["xs"],
+            )
+
+            # === log results ===
+            self.log_dict(
+                {f"train_metrics/{k}": v for k, v in metric_dict.items()},
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+            )
         return output_dict
 
     def on_validation_epoch_end(self, namespace="validation") -> None:
         if not self.validation_step_outputs:
             return
 
-        xs_pred, xs, video_paths, start_idxs, raw_gaze = zip(*self.validation_step_outputs)
+        xs_pred, xs, video_paths, start_idxs, raw_gaze, batch_idx = zip(*self.validation_step_outputs)
 
         xs_pred = torch.cat(xs_pred, dim=1)
         xs = torch.cat(xs, dim=1)
 
         # === optional visualization logging ===
-        if self.logger:
+        if batch_idx[0] % 1000 == 0 and self.logger:
             log_video(
                 xs_pred,
                 xs,
@@ -80,16 +86,6 @@ class DiffusionForcingScanpath(DiffusionForcingBase):
                 context_frames=self.context_frames,
                 logger=self.logger.experiment,
             )
-
-            # log_gaze_video_2d(
-            #     pred=xs_pred,
-            #     gt=xs,
-            #     step=None if namespace == "test" else self.global_step,
-            #     namespace=f"{namespace}_vis_2d",
-            #     resolution=self.cfg.dataset_video_resolution,
-            #     logger=self.logger.experiment,
-            # )
-
             log_real_video_with_gaze(
                 pred=xs_pred,
                 gt=xs,
