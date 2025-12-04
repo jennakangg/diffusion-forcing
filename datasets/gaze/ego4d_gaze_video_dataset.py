@@ -144,30 +144,78 @@ class Ego4DGazeVideoDataset(BaseGazeDataset):
 
         clip = clip.contiguous()
 
-        # === Load only the first frame of this clip ===
+        # # === Load only the first frame of this clip ===
+        # cap = cv2.VideoCapture(video_path)
+        # cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        # ret, frame = cap.read()
+        # cap.release()
+        # if not ret:
+        #     raise ValueError(f"Failed to read frame {frame_idx} from {video_path}")
+
+        # frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+
+        # # === Transform and extract ResNet features ===
+        # frame_tensor = self.resnet_transform(frame_rgb).unsqueeze(0)  # (1,3,224,224)
+        # if torch.cuda.is_available():
+        #     frame_tensor = frame_tensor.cuda()
+        #     with torch.no_grad():
+        #         feat_map = self.resnet(frame_tensor).cpu()  # (1,C,H',W')
+        # else:
+        #     with torch.no_grad():
+        #         feat_map = self.resnet(frame_tensor)
+        
+
+        # # === Flatten spatial dims to get action condition ===
+        # feat_flat = F.adaptive_avg_pool2d(feat_map, (1, 1)).squeeze().float()  # (C,)
+        # action_condition = feat_flat.unsqueeze(0).repeat(clip[::self.frame_skip].shape[0], 1)
+
+        # ===============================
+        # Load frames every K steps
+        # ===============================
+        K = 10   # condition every 10 frames
+
+        Tprime = clip[::self.frame_skip].shape[0]   # number of model timesteps
+        cond_features = []
+
         cap = cv2.VideoCapture(video_path)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, frame = cap.read()
+
+        for t in range(0, Tprime):
+            # map model timestep → actual video frame index
+            vid_frame_idx = frame_idx + t * self.frame_skip
+
+            # condition only every K frames
+            if t % K == 0:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, vid_frame_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    # fallback to previous feature (or zeros)
+                    if len(cond_features) > 0:
+                        cond_features.append(cond_features[-1])
+                    else:
+                        cond_features.append(torch.zeros(512))
+                    continue
+
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+                # ---- Extract ResNet features ----
+                frame_tensor = self.resnet_transform(frame_rgb).unsqueeze(0)
+                if torch.cuda.is_available():
+                    frame_tensor = frame_tensor.cuda()
+
+                with torch.no_grad():
+                    fmap = self.resnet(frame_tensor)  # (1, C, H', W')
+                    feat_flat = F.adaptive_avg_pool2d(fmap, (1, 1)).view(-1).cpu()
+
+                cond_features.append(feat_flat)
+            else:
+                # repeat last feature until next K-step feature arrives
+                cond_features.append(cond_features[-1])
+
         cap.release()
-        if not ret:
-            raise ValueError(f"Failed to read frame {frame_idx} from {video_path}")
 
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-
-        # === Transform and extract ResNet features ===
-        frame_tensor = self.resnet_transform(frame_rgb).unsqueeze(0)  # (1,3,224,224)
-        if torch.cuda.is_available():
-            frame_tensor = frame_tensor.cuda()
-            with torch.no_grad():
-                feat_map = self.resnet(frame_tensor).cpu()  # (1,C,H',W')
-        else:
-            with torch.no_grad():
-                feat_map = self.resnet(frame_tensor)
-
-        # === Flatten spatial dims to get action condition ===
-        feat_flat = F.adaptive_avg_pool2d(feat_map, (1, 1)).squeeze().float()  # (C,)
-        action_condition = feat_flat.unsqueeze(0).repeat(clip[::self.frame_skip].shape[0], 1)
+        # final tensor shape = (T', C)
+        action_condition = torch.stack(cond_features, dim=0).float()
         # print("dataset_video_resolution", self.cfg.dataset_video_resolution, raw_clip[0], clip[0,0,0,0]*self.cfg.dataset_video_resolution)
         # === Return tuple ===
         return (

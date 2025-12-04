@@ -24,7 +24,7 @@ diffusion:
   stabilization_level: 15
   # architecture
   architecture:
-    network_size: 16
+    network_size: 32
     attn_heads: 4
     attn_dim_head: 32
     dim_mults: [1, 2, 4, 8]
